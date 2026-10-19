@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: orbrush
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: node server/index.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.1
+      - key: ADMIN_KEY
+        sync: false
+      - key: DEFAULT_WEBHOOK
+        sync: false
