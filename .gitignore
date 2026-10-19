@@ -6,4 +6,6 @@ out/
 .DS_Store
 Thumbs.db
 server/data/
+build/icon.png
+build/icon.ico
 .env

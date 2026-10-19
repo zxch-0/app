@@ -18,12 +18,17 @@
     "dev": "electron .",
     "server": "node server/index.js",
     "render": "node server/index.js",
+    "assets": "node scripts/make-icon.js",
+    "ci:prepare": "node scripts/ci-prepare.js",
+    "predist": "node scripts/make-icon.js",
+    "predist:ci": "node scripts/make-icon.js",
+    "predist:exe": "node scripts/make-icon.js",
+    "predist:all": "node scripts/make-icon.js",
     "dir": "electron-builder --dir",
     "dist": "electron-builder --win msi --x64",
     "dist:ci": "electron-builder --win msi --x64 --publish never",
     "dist:exe": "electron-builder --win nsis --x64",
-    "dist:all": "electron-builder --win msi nsis --x64",
-    "ci:prepare": "node scripts/ci-prepare.js"
+    "dist:all": "electron-builder --win msi nsis --x64"
   },
   "dependencies": {
     "express": "^4.19.2"
@@ -51,6 +56,7 @@
     "asar": true,
     "compression": "maximum",
     "win": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "msi",
