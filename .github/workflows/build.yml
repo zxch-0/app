@@ -16,7 +16,7 @@ on:
         required: false
         default: ''
       publish:
-        description: 'Creer une release GitHub avec le .msi'
+        description: 'Creer une release GitHub avec l''installeur'
         type: choice
         options:
           - oui
@@ -34,7 +34,7 @@ jobs:
   build:
     name: Construire l'installeur
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Recuperer le depot
@@ -64,21 +64,43 @@ jobs:
         shell: pwsh
         run: node scripts/ci-prepare.js "${{ github.event.inputs.version }}"
 
-      - name: Construire le .msi
-        run: npm run dist:ci
+      - name: Generer l'icone
+        shell: pwsh
+        run: |
+          node scripts/make-icon.js
+          foreach ($f in @('build/icon.png', 'build/icon.ico')) {
+            if (-not (Test-Path $f)) { throw "Icone manquante : $f" }
+            "{0} ({1:N1} Ko)" -f $f, ((Get-Item $f).Length / 1KB)
+          }
+
+      - name: Construire l'installeur
+        id: build
+        shell: pwsh
+        run: |
+          npm run dist:ci
+          if ($LASTEXITCODE -eq 0) {
+            "target=msi" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host '::warning::Build MSI en echec, repli sur NSIS (.exe)'
+            npm run dist:exe
+            if ($LASTEXITCODE -ne 0) { throw 'Les deux builds ont echoue' }
+            "target=nsis" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Verifier le livrable
         shell: pwsh
         run: |
-          $msi = Get-ChildItem release -Filter *.msi -ErrorAction SilentlyContinue
-          if (-not $msi) { throw 'Aucun .msi genere dans release/' }
-          $msi | ForEach-Object { "{0} ({1:N1} Mo)" -f $_.Name, ($_.Length / 1MB) }
+          $files = Get-ChildItem release -Include *.msi, *.exe -Recurse -ErrorAction SilentlyContinue
+          if (-not $files) { throw 'Aucun installeur genere dans release/' }
+          $files | ForEach-Object { "{0} ({1:N1} Mo)" -f $_.Name, ($_.Length / 1MB) }
 
       - name: Publier l'artefact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.meta.outputs.artifact }}
-          path: release/*.msi
+          path: |
+            release/*.msi
+            release/*.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -88,7 +110,9 @@ jobs:
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: OrbRush ${{ steps.meta.outputs.version }}
-          files: release/*.msi
+          files: |
+            release/*.msi
+            release/*.exe
           generate_release_notes: true
           make_latest: true
           fail_on_unmatched_files: true
@@ -96,7 +120,6 @@ jobs:
       - name: Resume
         shell: pwsh
         run: |
-          "Version   : ${{ steps.meta.outputs.version }}"
-          "Tag       : ${{ steps.meta.outputs.tag }}"
-          "Fichier   : release/OrbRush-${{ steps.meta.outputs.version }}-setup.msi"
-          "Release   : ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.meta.outputs.tag }}"
+          "Version  : ${{ steps.meta.outputs.version }}"
+          "Cible    : ${{ steps.build.outputs.target }}"
+          "Release  : ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.meta.outputs.tag }}"
