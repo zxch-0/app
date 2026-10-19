@@ -20,8 +20,10 @@
     "render": "node server/index.js",
     "dir": "electron-builder --dir",
     "dist": "electron-builder --win msi --x64",
+    "dist:ci": "electron-builder --win msi --x64 --publish never",
     "dist:exe": "electron-builder --win nsis --x64",
-    "dist:all": "electron-builder --win msi nsis --x64"
+    "dist:all": "electron-builder --win msi nsis --x64",
+    "ci:prepare": "node scripts/ci-prepare.js"
   },
   "dependencies": {
     "express": "^4.19.2"
@@ -43,7 +45,8 @@
       "electron/**/*",
       "src/**/*",
       "package.json",
-      "!server/**/*"
+      "!server/**/*",
+      "!scripts/**/*"
     ],
     "asar": true,
     "compression": "maximum",
