@@ -84,7 +84,7 @@ jobs:
 
       - name: Creer la release GitHub
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'oui'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: OrbRush ${{ steps.meta.outputs.version }}
