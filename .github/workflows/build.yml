@@ -1,0 +1,102 @@
+name: Build Windows MSI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version a publier (ex: 1.2.0). Vide = version actuelle de package.json'
+        required: false
+        default: ''
+      publish:
+        description: 'Creer une release GitHub avec le .msi'
+        type: choice
+        options:
+          - oui
+          - non
+        default: oui
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Construire l'installeur
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Electron et npm
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/npm-cache
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Installer les dependances
+        run: npm install --no-audit --no-fund
+
+      - name: Determiner la version
+        id: meta
+        shell: pwsh
+        run: node scripts/ci-prepare.js "${{ github.event.inputs.version }}"
+
+      - name: Construire le .msi
+        run: npm run dist:ci
+
+      - name: Verifier le livrable
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem release -Filter *.msi -ErrorAction SilentlyContinue
+          if (-not $msi) { throw 'Aucun .msi genere dans release/' }
+          $msi | ForEach-Object { "{0} ({1:N1} Mo)" -f $_.Name, ($_.Length / 1MB) }
+
+      - name: Publier l'artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact }}
+          path: release/*.msi
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Creer la release GitHub
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'oui'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: OrbRush ${{ steps.meta.outputs.version }}
+          files: release/*.msi
+          generate_release_notes: true
+          make_latest: true
+          fail_on_unmatched_files: true
+
+      - name: Resume
+        shell: pwsh
+        run: |
+          "Version   : ${{ steps.meta.outputs.version }}"
+          "Tag       : ${{ steps.meta.outputs.tag }}"
+          "Fichier   : release/OrbRush-${{ steps.meta.outputs.version }}-setup.msi"
+          "Release   : ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.meta.outputs.tag }}"
