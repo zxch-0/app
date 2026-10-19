@@ -87,20 +87,31 @@ jobs:
             "target=nsis" >> $env:GITHUB_OUTPUT
           }
 
-      - name: Verifier le livrable
+      - name: Lister les livrables
+        id: collect
         shell: pwsh
         run: |
-          $files = Get-ChildItem release -Include *.msi, *.exe -Recurse -ErrorAction SilentlyContinue
-          if (-not $files) { throw 'Aucun installeur genere dans release/' }
+          $files = @(
+            Get-ChildItem -Path release -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Extension -in '.msi', '.exe' } |
+              Sort-Object Name
+          )
+
+          if ($files.Count -eq 0) {
+            throw 'Aucun installeur genere dans release/ (ni .msi ni .exe)'
+          }
+
           $files | ForEach-Object { "{0} ({1:N1} Mo)" -f $_.Name, ($_.Length / 1MB) }
+
+          Add-Content -Path $env:GITHUB_OUTPUT -Value 'files<<ORBRUSH_EOF' -Encoding utf8
+          $files | ForEach-Object { Add-Content -Path $env:GITHUB_OUTPUT -Value $_.FullName -Encoding utf8 }
+          Add-Content -Path $env:GITHUB_OUTPUT -Value 'ORBRUSH_EOF' -Encoding utf8
 
       - name: Publier l'artefact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.meta.outputs.artifact }}
-          path: |
-            release/*.msi
-            release/*.exe
+          name: OrbRush-${{ steps.meta.outputs.version }}-installer
+          path: ${{ steps.collect.outputs.files }}
           if-no-files-found: error
           retention-days: 30
 
@@ -110,16 +121,16 @@ jobs:
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: OrbRush ${{ steps.meta.outputs.version }}
-          files: |
-            release/*.msi
-            release/*.exe
+          files: ${{ steps.collect.outputs.files }}
           generate_release_notes: true
           make_latest: true
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
 
       - name: Resume
         shell: pwsh
         run: |
-          "Version  : ${{ steps.meta.outputs.version }}"
-          "Cible    : ${{ steps.build.outputs.target }}"
-          "Release  : ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.meta.outputs.tag }}"
+          "Version   : ${{ steps.meta.outputs.version }}"
+          "Cible     : ${{ steps.build.outputs.target }}"
+          "Livrables :"
+          ${{ steps.collect.outputs.files }} | ForEach-Object { "  - $_" }
+          "Release   : ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.meta.outputs.tag }}"
