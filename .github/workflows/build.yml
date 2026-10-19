@@ -53,7 +53,7 @@ jobs:
           "runner   : ${{ runner.os }} ${{ runner.arch }}"
 
       - name: Cache Electron et npm
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/AppData/Local/npm-cache
