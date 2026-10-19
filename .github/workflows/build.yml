@@ -43,7 +43,14 @@ jobs:
       - name: Installer Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+
+      - name: Diagnostic
+        shell: pwsh
+        run: |
+          "node     : $(node --version)"
+          "npm      : $(npm --version)"
+          "runner   : ${{ runner.os }} ${{ runner.arch }}"
 
       - name: Cache Electron et npm
         uses: actions/cache@v4
@@ -52,9 +59,9 @@ jobs:
             ~/AppData/Local/npm-cache
             ~/AppData/Local/electron/Cache
             ~/AppData/Local/electron-builder/Cache
-          key: ${{ runner.os }}-electron-${{ hashFiles('package.json') }}
+          key: ${{ runner.os }}-node22-electron-${{ hashFiles('package.json') }}
           restore-keys: |
-            ${{ runner.os }}-electron-
+            ${{ runner.os }}-node22-electron-
 
       - name: Installer les dependances
         run: npm install --no-audit --no-fund
@@ -73,10 +80,18 @@ jobs:
             "{0} ({1:N1} Ko)" -f $f, ((Get-Item $f).Length / 1KB)
           }
 
+      - name: Nettoyer les anciens artefacts
+        shell: pwsh
+        run: |
+          if (Test-Path release) { Remove-Item release -Recurse -Force }
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+
       - name: Construire l'installeur
         id: build
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+
           npm run dist:ci
           if ($LASTEXITCODE -eq 0) {
             "target=msi" >> $env:GITHUB_OUTPUT
