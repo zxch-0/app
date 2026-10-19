@@ -108,7 +108,7 @@ jobs:
           Add-Content -Path $env:GITHUB_OUTPUT -Value 'ORBRUSH_EOF' -Encoding utf8
 
       - name: Publier l'artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: OrbRush-${{ steps.meta.outputs.version }}-installer
           path: ${{ steps.collect.outputs.files }}
